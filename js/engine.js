@@ -63,7 +63,8 @@
   /** preparing → active: only now may answers be accepted and timers start. */
   const activate = (run) => (run.state === 'preparing' ? { ...run, state: 'active' } : run);
 
-  const pause = (run) => (['active', 'preparing'].includes(run.state) ? { ...run, state: 'paused', pausedFrom: run.state } : run);
+  // Pausable at any point mid-challenge, including while feedback is showing.
+  const pause = (run) => (['active', 'preparing', 'submitted', 'feedback'].includes(run.state) ? { ...run, state: 'paused', pausedFrom: run.state } : run);
   const resume = (run) => (run.state === 'paused' ? { ...run, state: run.pausedFrom, pausedFrom: null } : run);
 
   /**

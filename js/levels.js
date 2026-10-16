@@ -196,12 +196,16 @@
     return slots;
   }
 
-  /** Full, deterministic definition of level n (1..200). */
-  function level(n) {
+  /**
+   * Full definition of level n (1..200) at the Relaxed baseline.
+   * `variant` re-rolls which learned mechanics fill the mixed slots, so replays feel different;
+   * the same (n, variant) always gives the same level.
+   */
+  function level(n, variant = null) {
     if (!(Number.isInteger(n) && n >= 1 && n <= TOTAL)) throw new Error(`no level ${n}`);
     const world = worldOf(n);
     const type = typeOf(n);
-    const r = rng(hash(`level-structure-${n}`));
+    const r = rng(hash(variant === null ? `level-structure-${n}` : `level-structure-${n}-${variant}`));
     const boss = BOSSES[n] || null;
     const d = clamp(difficultyOf(n) + (boss ? 0.6 : 0), 1, 10);
     let slots;
@@ -230,11 +234,33 @@
     };
   }
 
-  /** Concrete challenges for one attempt of a level. */
-  function buildLevel(n, attempt = 0) {
-    const def = level(n);
+  /* ---------- Difficulty modes ---------- */
+  // Relaxed = the original curve (clock from Level 25). Normal puts quick-reaction puzzles on a
+  // ~10 s clock from Level 1. Hard: ~5 s clocks, memory/pattern questions timed too, one fewer mistake.
+  const MODES = {
+    relaxed: { id: 'relaxed', name: 'Relaxed', desc: 'No clock until Level 25. Take your time.', timeScale: 1, dBoost: 0, mistakeDelta: 0, early: false, logic: false },
+    normal: { id: 'normal', name: 'Normal', desc: 'A clock on every quick puzzle from Level 1.', timeScale: 1.2, dBoost: 0.5, mistakeDelta: 0, early: true, logic: false },
+    hard: { id: 'hard', name: 'Hard', desc: 'Around 5 seconds per puzzle, memory timed too, fewer mistakes.', timeScale: 0.62, dBoost: 1.5, mistakeDelta: -1, early: true, logic: true },
+  };
+  const modeOf = (id) => MODES[id] || MODES.normal;
+
+  /** Level n as played in a difficulty mode. */
+  function levelFor(n, modeId = 'normal', variant = null) {
+    const base = level(n, variant);
+    const m = modeOf(modeId);
+    const challenges = base.challenges.map((c) => {
+      const info = X.templateInfo(c.template);
+      const timed = c.timed || (m.early && info.timeable) || (m.logic && !['impulse', 'switch'].includes(info.category));
+      return { ...c, timed, d: Math.round(clamp(c.d + m.dBoost, 1, 11) * 100) / 100, speed: c.speed * m.timeScale };
+    });
+    return { ...base, mode: m.id, challenges, mistakesAllowed: Math.max(base.boss ? 1 : 0, base.mistakesAllowed + m.mistakeDelta) };
+  }
+
+  /** Concrete challenges for one play of a level. A fresh seed every play = fresh questions. */
+  function buildLevel(n, seed = 0, modeId = 'relaxed') {
+    const def = levelFor(n, modeId, seed);
     return def.challenges.map((c, i) => ({
-      ...X.generate(c.template, hash(`L${n}:a${attempt}:c${i}`), c.d, { timed: c.timed, speed: c.speed }),
+      ...X.generate(c.template, hash(`L${n}:s${seed}:c${i}`), c.d, { timed: c.timed, speed: c.speed }),
       phase: c.phase,
     }));
   }
@@ -270,7 +296,7 @@
   }
 
   const api = {
-    TOTAL, WORLDS, INTRO, TEACH, BOSSES, worldOf, level, buildLevel, introLevelOf,
+    TOTAL, WORLDS, INTRO, TEACH, BOSSES, MODES, modeOf, worldOf, level, levelFor, buildLevel, introLevelOf,
     endlessChallenge, endlessDifficulty, endlessTier, dailyChallenges, dateKey,
   };
   if (typeof module !== 'undefined') module.exports = api;

@@ -1,8 +1,8 @@
 /* Offline support: precache the app shell; serve network-first, fall back to cache offline. */
-const VERSION = 'brainglitch-v1';
+const VERSION = 'brainglitch-v2';
 const ASSETS = [
-  './', './index.html', './manifest.webmanifest', './icon.svg', './css/styles.css',
-  './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png',
+  './', './index.html', './manifest.webmanifest', './icon.svg', './favicon.ico', './apple-touch-icon.png', './css/styles.css',
+  './icons/icon-32.png', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-192.png', './icons/maskable-512.png',
   './js/vendor/gsap.min.js', './js/core.js', './js/challenges.js', './js/levels.js', './js/engine.js', './js/store.js',
   './js/fx.js', './js/audio.js', './js/render.js', './js/play.js', './js/screens.js', './js/app.js',
 ];

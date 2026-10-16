@@ -1043,10 +1043,14 @@
     impulse: "Don't Tap", pattern: 'Pattern Recognition', switch: 'Rule Switching',
   };
 
-  /** Time limit for a timed challenge; generous early, never below 2.5 s. */
-  function timeLimitFor(tpl, d, speed = 1) {
-    if (!tpl.timeable) return null;
-    return Math.max(2500, Math.round(tpl.baseMs * (1.3 - 0.05 * clamp(d, 1, 12)) * speed));
+  /**
+   * Time limit for a timed challenge; generous early, never below 2.5 s. Memory and pattern
+   * questions (Hard mode) get a longer thinking clock that never drops under 5 s.
+   */
+  function timeLimitFor(tpl, d, speed = 1, input = 'choice') {
+    if (tpl.timeable) return Math.max(2500, Math.round(tpl.baseMs * (1.3 - 0.05 * clamp(d, 1, 12)) * speed));
+    if (input !== 'choice' || !['memory', 'pattern'].includes(tpl.category)) return null;
+    return Math.max(5000, Math.round((10500 - 350 * clamp(d, 1, 12)) * Math.min(1, speed + 0.25)));
   }
 
   /**
@@ -1067,7 +1071,7 @@
       ...body,
     };
     ch.answer = tpl.solve(ch);
-    ch.timeLimit = opts.timed ? timeLimitFor(tpl, d, opts.speed || 1) : null;
+    ch.timeLimit = opts.timed ? timeLimitFor(tpl, d, opts.speed || 1, ch.input) : null;
     return ch;
   }
 

@@ -40,6 +40,7 @@
   function applySettings() {
     const st = state.settings;
     applyTheme();
+    document.documentElement.classList.toggle('reduce-motion', !!st.reducedMotion);
     FX.setReduced(st.reducedMotion);
     FX.setHaptics(st.haptics);
     Sfx.setEnabled(st.sound);
@@ -57,16 +58,21 @@
   }
 
   function playLevel(n) {
-    const def = L.level(n);
-    const attempt = state.progress.attempts[n] || 0;
+    // First time ever: let the player pick how hard the game should push.
+    if (!state.settings.difficultyChosen) { chooseDifficulty(() => playLevel(n)); return; }
+    const mode = state.settings.difficulty;
+    const seed = randomSeed(); // fresh questions on every play, still reproducible from the seed
+    const def = L.levelFor(n, mode, seed);
     commit(S.recordAttempt(state, n));
     const world = L.WORLDS[def.world - 1];
+    const modeTag = ` · ${L.modeOf(mode).name}`;
+    const mistakes = def.mistakesAllowed === 0 ? 'no mistakes allowed' : `${def.mistakesAllowed} mistake${def.mistakesAllowed > 1 ? 's' : ''} allowed`;
     startPlay({
-      mode: 'level', def, label: `LEVEL ${String(n).padStart(3, '0')}`,
-      challenges: L.buildLevel(n, attempt), mistakesAllowed: def.mistakesAllowed, lives: null,
+      mode: 'level', def, seed, label: `LEVEL ${String(n).padStart(3, '0')}`,
+      challenges: L.buildLevel(n, seed, mode), mistakesAllowed: def.mistakesAllowed, lives: null,
       intro: def.boss
-        ? { eyebrow: def.major ? `Major boss · Level ${n}` : `Boss level · ${n}`, title: def.title, sub: def.final ? 'Five phases. Everything you learned.' : `${def.challenges.length} challenges · ${def.mistakesAllowed} mistakes allowed` }
-        : { eyebrow: `World ${world.id} · ${world.name}`, title: `Level ${n}`, sub: def.title, teach: def.teach },
+        ? { eyebrow: (def.major ? `Major boss · Level ${n}` : `Boss level · ${n}`) + modeTag, title: def.title, sub: def.final ? 'Five phases. Everything you learned.' : `${def.challenges.length} challenges · ${mistakes}` }
+        : { eyebrow: `World ${world.id}${modeTag}`, title: `Level ${n}`, sub: `${def.title} · ${mistakes}`, teach: def.teach },
       onFinish(run) {
         const summary = E.summary(run);
         const completed = run.state === 'completed';
@@ -83,7 +89,7 @@
 
   function playEndless() {
     if (!S.endlessUnlocked(state)) { go('endless'); return; }
-    const seed = (crypto.getRandomValues ? crypto.getRandomValues(new Uint32Array(1))[0] : Math.floor(Math.random() * 2 ** 32)) >>> 0;
+    const seed = randomSeed();
     startPlay({
       mode: 'endless', label: 'ENDLESS', lives: 3, mistakesAllowed: Infinity,
       next: (i, run) => L.endlessChallenge(seed, i, run.challenges.map((c) => c.template)),
@@ -128,25 +134,55 @@
     go('result');
   }
 
-  /* ---------- Reset ---------- */
-  function confirmReset() {
+  function randomSeed() {
+    try { return crypto.getRandomValues(new Uint32Array(1))[0] >>> 0; } catch (e) { return Math.floor(Math.random() * 2 ** 32) >>> 0; }
+  }
+
+  /* ---------- Bottom sheets ---------- */
+  /** Slide up a sheet; returns close(then). Backdrop / [data-close] dismiss it. */
+  function openSheet(inner) {
     const root = document.getElementById('sheet-root');
     root.innerHTML = `<div class="sheet-backdrop" data-close></div>
-      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-t">
-        <h2 id="sheet-t">Reset all progress?</h2>
-        <p>Levels, stars, achievements, stats and streaks will be erased from this device. This can't be undone.</p>
-        <button class="btn btn-danger" data-reset>Erase Everything</button>
-        <button class="btn btn-secondary" data-close>Cancel</button>
-      </div>`;
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-t">${inner}</div>`;
     const sheet = root.querySelector('.sheet');
     const back = root.querySelector('.sheet-backdrop');
     gsap.fromTo(back, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.25 });
     gsap.fromTo(sheet, { yPercent: 100 }, { yPercent: 0, duration: 0.5, ease: 'expo.out' });
+    if (!FX.reduced()) gsap.fromTo(sheet.children, { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: 'expo.out', stagger: 0.04, delay: 0.1 });
+    let closing = false;
     const close = (then) => {
+      if (closing) return;
+      closing = true;
       gsap.to(back, { autoAlpha: 0, duration: 0.2 });
       gsap.to(sheet, { yPercent: 100, duration: 0.3, ease: 'power2.in', onComplete: () => { root.innerHTML = ''; if (then) then(); } });
     };
     root.querySelectorAll('[data-close]').forEach((b) => { b.onclick = () => close(); });
+    return { root, close };
+  }
+
+  /** Difficulty picker: shown before the very first level, and from Settings. */
+  function chooseDifficulty(then) {
+    const cur = state.settings.difficulty;
+    const { root, close } = openSheet(`<h2 id="sheet-t">How hard should it push?</h2>
+      <p>You can change this any time in Settings.</p>
+      <div class="mode-list">${Object.values(L.MODES).map((m) => `<button class="mode-card ${m.id === cur ? 'on' : ''}" data-mode="${m.id}">
+        <b>${m.name}${m.id === 'normal' ? ' <small>Recommended</small>' : ''}</b><span>${m.desc}</span></button>`).join('')}</div>`);
+    root.querySelectorAll('[data-mode]').forEach((b) => {
+      b.onclick = () => {
+        root.querySelectorAll('[data-mode]').forEach((x) => x.classList.toggle('on', x === b));
+        commit({ ...state, settings: { ...state.settings, difficulty: b.dataset.mode, difficultyChosen: true } });
+        FX.haptic(8);
+        setTimeout(() => close(then), 180);
+      };
+    });
+  }
+
+  /* ---------- Reset ---------- */
+  function confirmReset() {
+    const { root, close } = openSheet(`<h2 id="sheet-t">Reset all progress?</h2>
+        <p>Levels, stars, achievements, stats and streaks will be erased from this device. This can't be undone.</p>
+        <button class="btn btn-danger" data-reset>Erase Everything</button>
+        <button class="btn btn-secondary" data-close>Cancel</button>`);
     root.querySelector('[data-reset]').onclick = () => close(() => {
       const keep = state.settings;
       commit({ ...S.defaults(), settings: keep, view: 'home', lastResult: null });
@@ -162,7 +198,9 @@
     playLevel, playEndless, playDaily, confirmReset,
     setSetting(key, value) {
       commit({ ...state, settings: { ...state.settings, [key]: value } });
-      applySettings();
+      // Theme changes crossfade the whole page where the browser supports it.
+      if (key === 'theme' && document.startViewTransition && !FX.reduced()) document.startViewTransition(applySettings);
+      else applySettings();
       if (key === 'reducedMotion') FX.ambient();
       if (key === 'sound' && value) Sfx.play('tap');
     },
@@ -200,7 +238,12 @@
     const isPlay = name === 'play' && session;
     topbar.hidden = name === 'home' || name === 'play';
     titleEl.textContent = TITLES[name] || '';
-    document.documentElement.dataset.boss = isPlay && session.def && session.def.boss ? (session.def.major ? '2' : '1') : '0';
+    const boss = isPlay && session.def && session.def.boss ? (session.def.major ? '2' : '1') : '0';
+    if (document.documentElement.dataset.boss !== boss) {
+      document.documentElement.dataset.boss = boss;
+      // Ease the ambient light into its boss (or normal) colours instead of snapping.
+      if (!FX.reduced()) gsap.fromTo('.bg-glow', { autoAlpha: 0.2 }, { autoAlpha: 1, duration: 1.1, ease: 'power2.out' });
+    }
     if (isPlay) {
       stage.innerHTML = window.Play.html(session.label);
       const el = stage.firstElementChild;

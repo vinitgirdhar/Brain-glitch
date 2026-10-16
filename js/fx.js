@@ -171,7 +171,7 @@
     ambientTweens.forEach((t) => t.kill());
     ambientTweens.length = 0;
     if (reduced()) return;
-    [['.blob-a', 12, 8], ['.blob-b', -10, -9], ['.blob-c', -14, 10]].forEach(([sel, x, y], i) => {
+    [['.blob-a', 12, 8], ['.blob-b', -10, -9], ['.blob-c', -14, 10], ['.blob-d', 10, -8]].forEach(([sel, x, y], i) => {
       ambientTweens.push(gsap.to(sel, { xPercent: x, yPercent: y, scale: 1.12, duration: 14 + i * 4, ease: 'sine.inOut', repeat: -1, yoyo: true }));
     });
   }

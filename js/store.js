@@ -26,7 +26,7 @@
 
   const defaults = () => ({
     v: VERSION,
-    settings: { theme: 'system', sound: true, haptics: true, reducedMotion: false, colorMarks: false },
+    settings: { theme: 'system', difficulty: 'normal', difficultyChosen: false, sound: true, haptics: true, reducedMotion: false, colorMarks: false },
     progress: { unlocked: 1, levels: {}, attempts: {} },
     stats: {
       attempted: 0, correct: 0, timedCount: 0, timedSum: 0, bestReaction: null,
@@ -73,6 +73,8 @@
       v: VERSION,
       settings: {
         theme: ['system', 'light', 'dark'].includes(s.theme) ? s.theme : 'system',
+        difficulty: ['relaxed', 'normal', 'hard'].includes(s.difficulty) ? s.difficulty : 'normal',
+        difficultyChosen: bool(s.difficultyChosen, false),
         sound: bool(s.sound, true), haptics: bool(s.haptics, true),
         reducedMotion: bool(s.reducedMotion, false), colorMarks: bool(s.colorMarks, false),
       },

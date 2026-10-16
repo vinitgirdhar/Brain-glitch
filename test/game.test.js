@@ -94,6 +94,34 @@ const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); checks++; };
   eq([...X.TEMPLATES].sort(), [...intros].sort(), 'every template is taught exactly once');
 }
 
+/* ---------- Difficulty modes + fresh questions every play ---------- */
+{
+  const lim = (n, seed, mode) => L.buildLevel(n, seed, mode).map((c) => c.timeLimit);
+  ok(lim(1, 7, 'relaxed').every((t) => t === null), 'relaxed: level 1 has no clock');
+  ok(lim(1, 7, 'normal').every((t) => t >= 8000 && t <= 10500), 'normal: ~10 s clock on level 1');
+  ok(lim(1, 7, 'hard').every((t) => t >= 2500 && t <= 5500), 'hard: ~5 s clock on level 1');
+  ok(lim(4, 7, 'hard').every((t) => t >= 5000), 'hard: memory questions get a fair thinking clock');
+  ok(lim(4, 7, 'normal').every((t) => t === null), 'normal: memory stays untimed');
+  eq(L.levelFor(10, 'hard').mistakesAllowed, 0, 'hard: one fewer mistake');
+  eq(L.levelFor(20, 'hard').mistakesAllowed, 1, 'hard boss still allows one slip');
+  eq(L.levelFor(10, 'normal').mistakesAllowed, L.level(10).mistakesAllowed, 'normal keeps the mistake allowance');
+  ok(L.levelFor(30, 'hard').challenges[0].d > L.levelFor(30, 'normal').challenges[0].d, 'hard is harder');
+  for (const mode of ['relaxed', 'normal', 'hard']) {
+    for (let n = 1; n <= L.TOTAL; n += 7) {
+      L.buildLevel(n, 99, mode).forEach((ch) => eq(X.check(ch), [], `${mode} level ${n} ${ch.template}`));
+    }
+  }
+  // Same seed = same level (reproducible); new seed = new questions.
+  eq(L.buildLevel(1, 5, 'normal'), L.buildLevel(1, 5, 'normal'), 'seeded play reproducible');
+  const seen = new Set();
+  for (let seed = 1; seed <= 20; seed++) seen.add(JSON.stringify(L.buildLevel(1, seed, 'normal').map((c) => [c.options, c.answer])));
+  ok(seen.size >= 19, 'replays get different questions');
+  // Mixed levels also reshuffle which mechanics appear.
+  const mixes = new Set();
+  for (let seed = 1; seed <= 20; seed++) mixes.add(L.levelFor(41, 'normal', seed).challenges.map((c) => c.template).join());
+  ok(mixes.size > 5, 'mixed levels vary their mechanics');
+}
+
 /* ---------- Daily + endless ---------- */
 {
   const d1 = L.dailyChallenges('2026-10-17');
@@ -144,7 +172,11 @@ const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); checks++; };
   run = E.pause(E.activate(E.prepare(run)));
   eq(E.submit(run, chs[1].answer).result, null, 'answer accepted while paused');
   run = E.resume(run);
-  run = E.advance(E.showFeedback(E.submit(run, (chs[1].answer + 1) % chs[1].options.length).run));
+  let fb = E.showFeedback(E.submit(run, (chs[1].answer + 1) % chs[1].options.length).run);
+  // Pausing while feedback shows holds the level there until resumed.
+  fb = E.pause(fb);
+  eq(E.advance(fb), fb, 'advance must wait while paused');
+  run = E.advance(E.resume(fb));
   run = E.advance(E.showFeedback(E.submit(E.activate(E.prepare(run)), chs[2].answer).run));
   eq(run.state, 'completed', 'level completes with one allowed mistake');
   const sum = E.summary(run);
@@ -179,6 +211,7 @@ const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); checks++; };
   const junk = S.sanitize({ settings: { theme: 'neon', sound: 'yes' }, progress: { unlocked: 9999, levels: { 3: { stars: 7 }, 5: { stars: 2, best: 400 } } }, achievements: { fake: 1 } });
   eq(junk.settings.theme, 'system');
   eq(junk.settings.sound, true);
+  eq(junk.settings.difficulty, 'normal', 'unknown difficulty falls back to normal');
   eq(Object.keys(junk.progress.levels), ['5'], 'invalid level records dropped');
   eq(junk.progress.unlocked, 6, 'out-of-range unlock falls back to what was actually cleared');
   eq(junk.achievements, {});

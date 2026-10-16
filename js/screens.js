@@ -71,9 +71,9 @@
           </div>`}
         </div>
         <div class="screen-foot">
-          <button class="btn btn-primary btn-xl" data-anim data-act="play">${fresh ? 'Start Playing' : 'Continue Playing'}</button>
-          <div class="menu-grid" data-anim>
-            ${tiles.map(([k, label, ic]) => `<button class="menu-tile" data-go="${k}">${ic}<span>${label}</span></button>`).join('')}
+          <button class="btn btn-primary btn-xl btn-shine" data-anim data-act="play">${fresh ? 'Start Playing' : 'Continue Playing'}</button>
+          <div class="menu-grid">
+            ${tiles.map(([k, label, ic]) => `<button class="menu-tile" data-anim data-go="${k}">${ic}<span>${label}</span></button>`).join('')}
           </div>
         </div>
       </section>`,
@@ -96,10 +96,12 @@
     const words = [['RED', '#1e7bff'], ['BLUE', '#ff3b30'], ['GREEN', '#f5b800'], ['RED', '#28c24a']];
     const tl = gsap.timeline({ repeat: -1, repeatDelay: 0.4, delay: 0.6 });
     words.forEach(([w, c], i) => {
-      tl.to(morph, { borderRadius: i % 2 ? '22%' : '50%', rotation: (i + 1) * 90, backgroundColor: words[(i + 1) % 4][1], duration: 0.9, ease: 'expo.inOut' })
-        .to(word, { autoAlpha: 0, y: -8, duration: 0.15 }, '<0.1')
-        .call(() => { word.textContent = w; word.style.color = c; })
-        .to(word, { autoAlpha: 1, y: 0, duration: 0.3, ease: 'back.out(2)' })
+      // The word swaps mid-morph and is back on screen before the shape settles.
+      tl.addLabel(`m${i}`)
+        .to(morph, { borderRadius: i % 2 ? '22%' : '50%', rotation: (i + 1) * 90, backgroundColor: words[(i + 1) % 4][1], duration: 0.9, ease: 'expo.inOut' })
+        .to(word, { autoAlpha: 0, y: -8, scale: 0.9, duration: 0.14 }, `m${i}+=0.2`)
+        .call(() => { word.textContent = w; word.style.color = c; }, null, `m${i}+=0.34`)
+        .to(word, { autoAlpha: 1, y: 0, scale: 1, duration: 0.32, ease: 'back.out(2)' }, `m${i}+=0.34`)
         .to(orbs, { x: (n) => [36, -40, 20][(n + i) % 3], y: (n) => [-24, 10, 34][(n + i) % 3], duration: 0.9, ease: 'sine.inOut' }, '<-0.4')
         .to({}, { duration: 0.8 });
     });
@@ -126,7 +128,7 @@
           data-lv="${lv}" ${locked ? 'aria-disabled="true"' : ''} aria-label="Level ${lv}${isBoss ? ', boss' : ''}${locked ? ', locked' : rec ? `, ${rec.stars} stars` : ''}">
           ${isBoss ? `<span class="crown">${icon.crown}</span>` : ''}
           <b>${locked ? icon.lock : lv}</b>
-          <span class="tile-stars">${rec ? starStr(rec.stars) : locked ? '' : '☆☆☆'}</span>
+          <span class="tile-stars ${rec ? '' : 'empty'}">${rec ? starStr(rec.stars) : locked ? '' : '☆☆☆'}</span>
         </button>`);
       }
       const open = w.from <= unlocked;
@@ -146,9 +148,12 @@
         const cur = el.querySelector('.level-tile.current') || el.querySelector('.level-tile');
         const world = cur.closest('.world');
         scroller.scrollTop = Math.max(0, world.offsetTop - 8);
+        let opening = false; // one tap opens one level, even on a quick double tap
         el.querySelectorAll('.level-tile').forEach((b) => {
           b.onclick = () => {
+            if (opening) return;
             if (b.classList.contains('locked')) { FX.shake(b); FX.toast('Clear the level before it first'); return; }
+            opening = true;
             const lv = Number(b.dataset.lv);
             FX.haptic(8);
             if (FX.reduced()) { ctx.playLevel(lv); return; }
@@ -412,6 +417,13 @@
             ${['system', 'light', 'dark'].map((t) => `<button role="radio" aria-checked="${st.theme === t}" data-theme-opt="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}
           </div>
         </div>
+        <div class="card" data-anim>
+          <p class="eyebrow">Difficulty</p>
+          <div class="seg" role="radiogroup" aria-label="Difficulty">
+            ${Object.values(L.MODES).map((m) => `<button role="radio" aria-checked="${st.difficulty === m.id}" data-mode-opt="${m.id}">${m.name}</button>`).join('')}
+          </div>
+          <p class="muted small seg-note" data-mode-desc>${esc(L.modeOf(st.difficulty).desc)}</p>
+        </div>
         <div class="card set-list" data-anim>
           ${toggle('sound', 'Sound effects', 'Soft taps and chimes')}
           ${toggle('haptics', 'Haptic feedback', 'Vibration where your phone supports it')}
@@ -429,6 +441,16 @@
           b.onclick = () => {
             ctx.setSetting('theme', b.dataset.themeOpt);
             el.querySelectorAll('[data-theme-opt]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+          };
+        });
+        const desc = el.querySelector('[data-mode-desc]');
+        el.querySelectorAll('[data-mode-opt]').forEach((b) => {
+          b.onclick = () => {
+            ctx.setSetting('difficulty', b.dataset.modeOpt);
+            ctx.setSetting('difficultyChosen', true);
+            el.querySelectorAll('[data-mode-opt]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+            desc.textContent = L.modeOf(b.dataset.modeOpt).desc;
+            if (!FX.reduced()) gsap.fromTo(desc, { autoAlpha: 0, y: 6 }, { autoAlpha: 1, y: 0, duration: 0.3 });
           };
         });
         el.querySelectorAll('[data-toggle]').forEach((b) => {

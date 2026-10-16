@@ -68,6 +68,7 @@
     if (session.mode === 'endless') run = { ...run, total: Infinity };
     let alive = true;
     let pendingReady = null; // entrance finished while paused
+    let pendingAdvance = false; // feedback finished while paused
     let chCleanup = null;
     let startAt = 0;
     let timeoutId = null;
@@ -84,6 +85,15 @@
     const stage = q('[data-stage]');
     const answers = q('[data-answers]');
     const banner = q('[data-banner]');
+    // Overlays live outside the app column so they cover the full screen, safe areas included.
+    const overlays = document.getElementById('overlay-root');
+    const introEl = document.createElement('div');
+    introEl.className = 'intro';
+    introEl.hidden = true;
+    const pauseRoot = document.createElement('div');
+    pauseRoot.className = 'pause';
+    pauseRoot.hidden = true;
+    overlays.append(introEl, pauseRoot);
 
     hud.hearts.innerHTML = hearts ? Array.from({ length: hearts }, () => `<span class="heart">${icon.heart}</span>`).join('') : '';
     const lock = (on) => { answers.classList.toggle('locked', on); stage.classList.toggle('locked', on); };
@@ -97,7 +107,13 @@
       gsap.to(o, { v, duration: 0.5, ease: 'power2.out', onUpdate: () => { hud.score.textContent = Math.round(o.v).toLocaleString(); } });
     }
     function setProgress() {
-      if (session.mode === 'endless') { hud.count.textContent = `${run.answers.length} cleared`; return; }
+      if (session.mode === 'endless') {
+        // Endless: the bar fills toward the next difficulty tier.
+        const done = run.answers.length;
+        hud.count.textContent = `Tier ${Math.floor(done / 10) + 1} · ${done} cleared`;
+        gsap.to(hud.fill, { width: `${(done % 10) * 10}%`, duration: 0.6, ease: 'expo.out' });
+        return;
+      }
       const pct = (run.answers.length / run.total) * 100;
       gsap.to(hud.fill, { width: `${pct}%`, duration: 0.6, ease: 'expo.out' });
       hud.count.textContent = `${Math.min(run.answers.length + 1, run.total)} / ${run.total}`;
@@ -271,6 +287,7 @@
     /** Entrance done: accept input, start the challenge timer (if any). */
     function ready(ch) {
       if (!alive) return;
+      if (document.hidden) pause(); // never start a clock while nobody is looking
       if (run.state === 'paused') { pendingReady = ch; return; }
       run = E.activate(run);
       lock(false);
@@ -323,7 +340,10 @@
       // Long enough to read why; tap anywhere to move on sooner.
       let moved = false;
       const go = () => { if (!moved) { moved = true; el.removeEventListener('pointerdown', skip); advance(); } };
-      const skip = () => { if (clock.now() - shownAt > 450) go(); };
+      const skip = (e) => {
+        if (e.target.closest('[data-pause-btn]') || run.state === 'paused') return;
+        if (clock.now() - shownAt > 450) go();
+      };
       const shownAt = clock.now();
       el.addEventListener('pointerdown', skip);
       clock.after(2300, go);
@@ -340,6 +360,7 @@
 
     function advance() {
       if (!alive) return;
+      if (run.state === 'paused') { pendingAdvance = true; return; }
       hideBanner();
       run = E.advance(run);
       if (run.state === 'completed' || run.state === 'failed') return finish();
@@ -480,7 +501,7 @@
     /* ---------- Intro / boss cinematic ---------- */
     function intro() {
       return new Promise((resolve) => {
-        const ov = q('[data-intro]');
+        const ov = introEl;
         const i = session.intro;
         const boss = session.def && session.def.boss;
         ov.hidden = false;
@@ -516,15 +537,14 @@
         if (go) go.onclick = close;
         else {
           ov.onclick = close;
-          setTimeout(close, 1400);
+          setTimeout(close, 1600);
         }
       });
     }
 
     /* ---------- Pause ---------- */
-    const pauseRoot = q('[data-pause]');
     function pause() {
-      if (finished || !['active', 'preparing'].includes(run.state)) return;
+      if (finished || run.state === 'paused' || !['active', 'preparing', 'submitted', 'feedback'].includes(run.state)) return;
       run = E.pause(run);
       clock.pause();
       pauseRoot.hidden = false;
@@ -540,6 +560,7 @@
       pauseRoot.querySelector('[data-resume]').onclick = resume;
       pauseRoot.querySelector('[data-restart]').onclick = () => { alive = false; session.onRestart(); };
       pauseRoot.querySelector('[data-quit]').onclick = () => { alive = false; session.onQuit(); };
+      pauseRoot.querySelector('[data-resume]').focus({ preventScroll: true });
     }
     function resume() {
       if (run.state !== 'paused') return;
@@ -547,6 +568,7 @@
       run = E.resume(run);
       clock.resume();
       if (pendingReady) { const ch = pendingReady; pendingReady = null; ready(ch); }
+      if (pendingAdvance) { pendingAdvance = false; advance(); }
     }
     q('[data-pause-btn]').onclick = pause;
     const onVis = () => { if (document.hidden) pause(); };
@@ -563,6 +585,12 @@
       if (chCleanup) chCleanup();
       document.removeEventListener('visibilitychange', onVis);
       gsap.killTweensOf([banner, hud.fill, hud.timerFill]);
+      // Fade overlays out alongside the screen, then drop exactly these nodes.
+      [introEl, pauseRoot].forEach((n) => {
+        gsap.killTweensOf(n);
+        if (n.hidden) n.remove();
+        else gsap.to(n, { autoAlpha: 0, duration: 0.25, onComplete: () => n.remove() });
+      });
     };
   }
 
@@ -586,8 +614,6 @@
         <div class="banner" data-banner aria-live="assertive"></div>
       </div>
       <div class="answers" data-answers></div>
-      <div class="intro" data-intro hidden></div>
-      <div class="pause" data-pause hidden></div>
     </section>`;
   }
 

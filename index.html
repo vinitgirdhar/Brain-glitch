@@ -6,14 +6,17 @@
   <title>Brain Glitch</title>
   <meta name="description" content="Your brain knows the answer. Your fingers disagree. A free brain-training and reflex game.">
   <meta name="theme-color" id="theme-color" content="#000000">
+  <meta name="color-scheme" content="light dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Brain Glitch">
   <meta name="application-name" content="Brain Glitch">
+  <link rel="icon" href="favicon.ico" sizes="48x48">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/icon-32.png" type="image/png" sizes="32x32">
   <link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
-  <link rel="apple-touch-icon" href="icons/icon-180.png" sizes="180x180">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" sizes="180x180">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- Non-blocking font: system fonts render first, and offline play never waits on it. -->
@@ -31,10 +34,14 @@
   </script>
 </head>
 <body>
+  <!-- Full-bleed background: overscans every edge so no gradient seam ever shows. -->
   <div class="bg" aria-hidden="true">
-    <div class="blob blob-a"></div>
-    <div class="blob blob-b"></div>
-    <div class="blob blob-c"></div>
+    <div class="bg-glow">
+      <div class="blob blob-a"></div>
+      <div class="blob blob-b"></div>
+      <div class="blob blob-c"></div>
+      <div class="blob blob-d"></div>
+    </div>
   </div>
 
   <div class="app">
@@ -48,6 +55,7 @@
     <main id="stage" class="stage"></main>
   </div>
 
+  <div id="overlay-root"></div>
   <div id="sheet-root"></div>
   <div id="ach-root" class="ach-root" aria-live="polite"></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
